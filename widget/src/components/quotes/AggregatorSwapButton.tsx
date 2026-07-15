@@ -153,6 +153,9 @@ export const AggregatorSwapButton: React.FC<AggregatorSwapButtonProps> = ({
         },
       });
     } catch (e) {
+      if (!isUserRejectionError(e)) {
+        console.error('[usdm-bridge] aggregator swap execution failed', e);
+      }
       if (trackingStarted) {
         // Already executing/tracking — reflect the failure in the status UI.
         useWidgetSwapUIStore.getState().setTxStatus('failed');

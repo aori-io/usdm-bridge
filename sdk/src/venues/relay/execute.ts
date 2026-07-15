@@ -1,4 +1,4 @@
-import { type Address, type Hash, type WalletClient } from 'viem';
+import { type Address, type Hash, type PublicClient, type WalletClient, createPublicClient, custom } from 'viem';
 import { sendTransaction, signMessage, signTypedData } from 'viem/actions';
 import type { SdkEnvironment } from '../../api/environment';
 import { QuoteStaleError } from '../../errors';
@@ -17,6 +17,27 @@ export interface ExecuteRelayContext {
 
 function checkAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new DOMException('Relay execution aborted', 'AbortError');
+}
+
+/**
+ * Resolve a viem `PublicClient` for awaiting a receipt on `chainId`. Prefers the
+ * SDK's configured RPC (integrator overrides + static registry), but Relay
+ * supports many chains that aren't in the SDK's registry (e.g. HyperEVM), so
+ * when no RPC is configured we fall back to the connected wallet's own provider,
+ * which is already on this (source) chain. Without this fallback a Relay swap on
+ * an unregistered chain throws right after the deposit tx is sent, surfacing as
+ * an immediate failure.
+ */
+function getReceiptClient(sdkEnv: SdkEnvironment, chainId: number, walletClient: WalletClient): PublicClient {
+  try {
+    return getPublicClient(sdkEnv, chainId);
+  } catch {
+    const request = (walletClient as unknown as { request?: (args: unknown) => Promise<unknown> }).request;
+    if (typeof request !== 'function') throw new Error(`No RPC available to await receipt on chain ${chainId}`);
+    return createPublicClient({
+      transport: custom({ request: (args) => request(args) }),
+    }) as PublicClient;
+  }
 }
 
 /** A transaction step id that actually commits funds (as opposed to `approve`). */
@@ -218,7 +239,7 @@ async function executeTransactionItem(step: RelayStep, item: RelayStepItem, ctx:
     ctx.onStep({ kind: 'transaction-sent', hash, chainId });
   }
 
-  await getPublicClient(ctx.sdkEnv, chainId).waitForTransactionReceipt({ hash });
+  await getReceiptClient(ctx.sdkEnv, chainId, ctx.walletClient as WalletClient).waitForTransactionReceipt({ hash });
 
   if (item.check?.endpoint) {
     await pollStepCheck(ctx.relayEnv, item.check.endpoint, item.check.method, ctx.abortSignal);
