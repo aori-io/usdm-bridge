@@ -1,7 +1,6 @@
 # USDM Bridge
 
-Monorepo for the **USDM bridge** — a cross-chain bridge for USDM powered by Aori and the
-LayerZero Value Transfer (VT) API. It contains two publishable packages plus a set of
+Monorepo for the **USDM bridge** — a cross-chain bridge for USDM powered by Aori. It contains two publishable packages plus a set of
 example integrations, managed as a single [Bun](https://bun.sh) workspace.
 
 ## Packages
