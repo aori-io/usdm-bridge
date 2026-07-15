@@ -1,0 +1,23 @@
+{
+  "name": "usdm-bridge-rest-api-example",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Minimal Express REST API that wraps usdm-bridge-sdk for server-side quoting, submission, and status tracking.",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "usdm-bridge-sdk": "workspace:*",
+    "express": "^4.21.2",
+    "viem": "2.48.1"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.0"
+  }
+}

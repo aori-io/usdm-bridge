@@ -1,0 +1,50 @@
+{
+  "name": "usdm-bridge",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Monorepo for the USDM bridge: the usdm-bridge-sdk TypeScript SDK, the usdm-bridge-widget React widget, and example integrations.",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "bun@1.2.17",
+  "engines": {
+    "node": ">=18",
+    "bun": ">=1.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aori-io/widget-testing.git"
+  },
+  "workspaces": [
+    "widget",
+    "sdk",
+    "examples/*"
+  ],
+  "scripts": {
+    "build": "bun scripts/pkg.ts build",
+    "build:widget": "bun scripts/pkg.ts build widget",
+    "build:sdk": "bun scripts/pkg.ts build sdk",
+    "dev:widget": "bun scripts/pkg.ts dev widget",
+    "dev:sdk": "bun scripts/pkg.ts dev sdk",
+    "type-check": "bun scripts/pkg.ts type-check",
+    "lint": "bun scripts/pkg.ts lint",
+    "clean": "bun scripts/pkg.ts clean",
+    "dev:app": "bun run --filter usdm-bridge-app-example dev",
+    "build:app": "bun run --filter usdm-bridge-app-example build",
+    "start:app": "bun run --filter usdm-bridge-app-example start",
+    "dev:app:full": "bun run --filter usdm-bridge-widget --filter usdm-bridge-app-example dev",
+    "dev:rest-api": "bun run --filter usdm-bridge-rest-api-example dev",
+    "start:rest-api": "bun run --filter usdm-bridge-rest-api-example start",
+    "dev:rest-api:full": "bun run --filter usdm-bridge-sdk --filter usdm-bridge-rest-api-example dev",
+    "type-check:examples": "bun run --filter usdm-bridge-rest-api-example type-check",
+    "version:widget": "bun scripts/pkg.ts version widget",
+    "version:sdk": "bun scripts/pkg.ts version sdk",
+    "publish:widget": "bun scripts/pkg.ts publish widget",
+    "publish:sdk": "bun scripts/pkg.ts publish sdk",
+    "publish:all": "bun scripts/pkg.ts publish all",
+    "pkg": "bun scripts/pkg.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14",
+    "typescript": "^5"
+  }
+}

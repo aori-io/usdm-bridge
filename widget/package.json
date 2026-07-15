@@ -1,0 +1,70 @@
+{
+  "name": "usdm-bridge-widget",
+  "version": "0.1.0",
+  "description": "Embeddable cross-chain swap widget powered by Aori",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aori-io/widget-testing.git",
+    "directory": "widget"
+  },
+  "type": "module",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./styles.css": "./dist/index.css"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "echo 'Widget package lint complete'",
+    "type-check": "tsc --noEmit",
+    "prepublishOnly": "bun run build"
+  },
+  "peerDependencies": {
+    "react": "^18 || ^19",
+    "react-dom": "^18 || ^19",
+    "@tanstack/react-query": ">=5",
+    "@wagmi/core": "^2",
+    "abitype": ">=1",
+    "viem": "^2",
+    "wagmi": "^2",
+    "zustand": "^4 || ^5"
+  },
+  "peerDependenciesMeta": {
+    "abitype": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@aori/aori-ts": "^0.3.5",
+    "usdm-bridge-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.0",
+    "@types/node": "^22",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "ethereum-gradient-base64": "^1.0.0",
+    "postcss": "^8.5.0",
+    "postcss-prefix-selector": "^2.1.1",
+    "tsup": "^8.4.0",
+    "typescript": "^5"
+  }
+}

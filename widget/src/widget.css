@@ -1,0 +1,13 @@
+@layer aori-base, aori-theme, aori-utilities;
+@import "tailwindcss/preflight.css" layer(aori-base);
+@import "tailwindcss/theme.css" layer(aori-theme);
+@import "tailwindcss/utilities.css" layer(aori-utilities);
+@source "./";
+
+@utility text-2xs {
+  font-size: 0.75rem;
+}
+
+@utility text-3xs {
+  font-size: 0.68rem;
+}
