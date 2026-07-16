@@ -1,6 +1,7 @@
 # USDM Bridge
 
-Monorepo for the **USDM bridge** — a cross-chain bridge for USDM powered by Aori. It contains two publishable packages plus a set of
+Monorepo for the **USDM bridge** — a cross-chain bridge for USDM powered by Aori and the
+LayerZero Value Transfer (VT) API. It contains two publishable packages plus a set of
 example integrations, managed as a single [Bun](https://bun.sh) workspace.
 
 ## Packages
@@ -52,10 +53,10 @@ example scripts, and the watch-based dev loop.
 
 ## Contributing
 
-Contributions from the MegaETH community are welcome. Before opening a PR, run
-`bun install && bun run build && bun run type-check`. Keep the SDK headless (no
-UI/React dependencies) and the widget's public API stable. See
-[Local development](./docs/local-development.md) and
+Contributions are welcome. Before opening a PR, run
+`bun install && bun run build && bun run type-check` (CI runs the same checks on
+every PR). Keep the SDK headless (no UI/React dependencies) and the widget's
+public API stable. See [Local development](./docs/local-development.md) and
 [Package management](./docs/package-management.md) for details.
 
 ## License

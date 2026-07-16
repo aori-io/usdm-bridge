@@ -5,7 +5,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/aori-io/widget-testing.git",
+    "url": "https://github.com/aori-io/usdm-bridge.git",
     "directory": "widget"
   },
   "type": "module",

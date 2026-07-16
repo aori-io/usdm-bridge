@@ -17,7 +17,7 @@
  *   clean        Remove each target's dist/ build output
  *   version      Bump a single package's version:
  *                  version <widget|sdk> <patch|minor|major|x.y.z>
- *   publish      Build then `npm publish` the package(s)
+ *   publish      Build then `bun publish` the package(s)
  *                  (passthrough e.g. `-- --dry-run` or `-- --tag next`)
  *   help         Show this message
  *
@@ -109,6 +109,7 @@ function main(): void {
   // Everything from the first flag (`-x`/`--x`) or an explicit `--` separator
   // onward is treated as passthrough. This works whether the tool is invoked
   // directly or via `bun run <script> -- <flags>` (bun strips the `--`).
+  // Passthrough examples for publish: `--dry-run`, `--tag next`, `--access public`.
   const positional: string[] = [];
   const passthrough: string[] = [];
   let inPassthrough = false;
@@ -188,7 +189,10 @@ function main(): void {
       // Always build fresh before publishing.
       for (const key of keys) runPkgScript(key, "build");
       for (const key of keys) {
-        run(["npm", "publish", ...passthrough], pkgDir(key));
+        // Prefer `bun publish` over `npm publish` so workspace:* deps (e.g.
+        // widget → usdm-bridge-sdk) are rewritten to the concrete version in
+        // the published tarball.
+        run(["bun", "publish", ...passthrough], pkgDir(key));
         console.log(green(`\n✓ published ${readPkgJson(key).name}`));
       }
       return;

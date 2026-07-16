@@ -49,10 +49,32 @@ bun run publish:all             # publish both
 (Example-app scripts like `dev:app` live in
 [local-development.md](./local-development.md).)
 
+## CI
+
+GitHub Actions runs on every PR and push to `main`/`master`
+([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)):
+
+1. `bun install --frozen-lockfile`
+2. `bun run type-check`
+3. `bun run build`
+4. `publish --dry-run` for both packages (validates the tarball without publishing)
+
+Require the CI check to pass before merging (branch protection).
+
 ## Publishing
 
 Both packages publish to the public npm registry
 (`publishConfig.access: "public"`).
+
+### From GitHub Actions (preferred)
+
+1. Bump the version on a branch and merge: `bun run version:<pkg> <bump>`
+2. Open **Actions → Publish → Run workflow**
+3. Choose `sdk`, `widget`, or `all` (start with **dry-run** once to verify)
+4. Requires the `NPM_TOKEN` repository secret (npm automation / granular token
+   with publish rights)
+
+### Locally
 
 1. Bump the version: `bun run version:<pkg> <bump>`
 2. Dry-run to inspect the tarball: `bun run publish:<pkg> -- --dry-run`
@@ -60,7 +82,9 @@ Both packages publish to the public npm registry
 
 `publish` always rebuilds the package first, and each package's
 `prepublishOnly` runs the build again as a safety net. Only `dist/` is shipped
-(see each package's `files` field).
+(see each package's `files` field). Publishing goes through `bun publish` (not
+`npm publish`) so `workspace:*` dependencies are rewritten to concrete versions
+in the published tarball.
 
 ## Notes
 
