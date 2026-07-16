@@ -57,3 +57,7 @@ Contributions from the MegaETH community are welcome. Before opening a PR, run
 UI/React dependencies) and the widget's public API stable. See
 [Local development](./docs/local-development.md) and
 [Package management](./docs/package-management.md) for details.
+
+## License
+
+[MIT](./LICENSE)
