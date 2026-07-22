@@ -17,9 +17,9 @@ import {
 } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
 import type { Asset } from '../../types';
-import { isRelayConfigured } from '../../environment';
+import { hasSearchableTokenSources, isRelayConfigured } from '../../environment';
 import { getWidgetSdk } from '../../client/sdk';
-import { fetchRelayTokensForChain, fetchTokenRegistry } from './queryFunctions';
+import { fetchRelayTokensForChain, fetchTokenRegistry, fetchTokenSearch } from './queryFunctions';
 import { tokenKeys } from './queryKeys';
 
 const EMPTY_TOKENS: Asset[] = [];
@@ -291,6 +291,28 @@ export function useRelayTokensForChain(chainId: number | null) {
     gcTime: 10 * 60_000,
     retry: 1,
     refetchOnWindowFocus: false,
+  });
+}
+
+/**
+ * Server-side token search for search-as-you-type. Enabled only when a
+ * searchable source is configured (Relay or an integrator `custom` source) and
+ * a non-empty term is provided. Debounce the `term` at the call site (the asset
+ * menu already does). Results are meant to be merged with the client-side
+ * filtered registry so locally-known tokens still show instantly.
+ */
+export function useTokenSearch(term: string, chainId?: number) {
+  const query = term.trim();
+  const enabled = hasSearchableTokenSources() && query.length > 0;
+  return useQuery({
+    queryKey: tokenKeys.search(query, chainId),
+    queryFn: ({ signal }) => fetchTokenSearch(query, chainId, signal),
+    enabled,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    placeholderData: (prev) => prev,
   });
 }
 

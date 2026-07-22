@@ -102,32 +102,47 @@ interface RawRelayCurrency {
 
 export interface GetRelayCurrenciesOptions {
   signal?: AbortSignal;
-  /** Max tokens per request. Default 100. */
+  /** Max tokens per request. Default 100 (Relay caps at 100). */
   limit?: number;
-  /** Optional search term (symbol/name/address). */
+  /** Optional search term (symbol/name/address). Searched server-side by Relay. */
   term?: string;
   /** Only verified tokens. Default true. */
   verifiedOnly?: boolean;
+  /**
+   * Request Relay's curated default/suggested list. When true, an empty
+   * `chainIds` is allowed (Relay returns its cross-chain default set).
+   */
+  defaultList?: boolean;
+  /** Resolve specific tokens by `"chainId:address"` identity keys. */
+  tokens?: string[];
+  /** Let Relay fall back to 3rd-party lookups for tokens it hasn't indexed. */
+  useExternalSearch?: boolean;
 }
 
 /**
- * Fetch Relay currencies for the given chain IDs (`POST /currencies/v2`) and
- * normalize them. Returns `[]` for an empty chain list.
+ * Fetch Relay currencies (`POST /currencies/v2`) and normalize them. Requires at
+ * least one of `chainIds`, `opts.defaultList`, or `opts.tokens`; returns `[]`
+ * when none is provided (an unscoped, non-default call).
  */
 export async function getRelayCurrencies(
   env: RelayEnvironment,
   chainIds: number[],
   opts: GetRelayCurrenciesOptions = {},
 ): Promise<RelayCurrencyInfo[]> {
-  if (!Array.isArray(chainIds) || chainIds.length === 0) return [];
+  const hasChains = Array.isArray(chainIds) && chainIds.length > 0;
+  const hasTokens = Array.isArray(opts.tokens) && opts.tokens.length > 0;
+  if (!hasChains && !opts.defaultList && !hasTokens) return [];
   const url = resolveRelayUrl(env, '/currencies/v2');
   const res = await relayFetch<RawRelayCurrency[] | { currencies?: RawRelayCurrency[] }>(env, url, {
     method: 'POST',
     body: {
-      chainIds,
-      limit: opts.limit ?? 100,
+      ...(hasChains ? { chainIds } : {}),
+      limit: Math.min(opts.limit ?? 100, 100),
       verified: opts.verifiedOnly !== false,
       ...(opts.term ? { term: opts.term } : {}),
+      ...(opts.defaultList ? { defaultList: true } : {}),
+      ...(hasTokens ? { tokens: opts.tokens } : {}),
+      ...(opts.useExternalSearch ? { useExternalSearch: true } : {}),
     },
     ...(opts.signal ? { signal: opts.signal } : {}),
   });

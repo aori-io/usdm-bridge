@@ -1,10 +1,53 @@
 import type { WalletScreeningConfig } from '../screening/walletScreening';
-import type { NormalizedQuote } from '../venues/types';
+import type {
+  GetTokenPriceParams,
+  GetTokensParams,
+  NormalizedQuote,
+  TokenMetadata,
+} from '../venues/types';
 
 export interface TokenRef {
   chainId: number;
   address: string;
 }
+
+/**
+ * An integrator-supplied token-population source. Merged into
+ * {@link UsdmBridgeConfig.tokens.sources} and consumed by `getTokenRegistry`
+ * alongside the built-in venue sources (Aori/Relay).
+ *
+ * Three shapes are supported:
+ * - `custom`  — bring your own async fetcher (mirrors Relay's `queryTokenList`
+ *   pattern: base URL + options → normalized tokens). This is the primary shape
+ *   for server-curated / searchable token APIs.
+ * - `tokenlist` — a hosted JSON endpoint returning a Uniswap-standard token list
+ *   (`{ tokens: [...] }`) or a raw `TokenMetadata[]`. Static/GET only.
+ * - `static` — an inline array baked into config.
+ */
+export type TokenSourceConfig =
+  | {
+      id: string;
+      type: 'custom';
+      /** Fetch/search tokens. Receives the same params venues get. */
+      getTokens: (params?: GetTokensParams) => Promise<TokenMetadata[]>;
+      /** Optional single-token USD price resolver. */
+      getTokenPrice?: (params: GetTokenPriceParams) => Promise<number | null>;
+      /** Set true when `getTokens` honors `term` server-side (search-as-you-type). */
+      searchable?: boolean;
+    }
+  | {
+      id: string;
+      type: 'tokenlist';
+      /** URL returning `{ tokens: TokenMetadata[] }` or `TokenMetadata[]`. */
+      url: string;
+      /** Extra request headers (e.g. an integrator key). */
+      headers?: Record<string, string>;
+    }
+  | {
+      id: string;
+      type: 'static';
+      tokens: TokenMetadata[];
+    };
 
 /**
  * Per-venue configuration. Additive: omit `venues` entirely and the SDK behaves
@@ -54,6 +97,25 @@ export interface UsdmBridgeConfig {
     supportedInputChains?: number[];
     /** When set, `getQuote` rejects pairs whose output chain is not in this list. */
     supportedOutputChains?: number[];
+
+    /**
+     * Integrator-supplied token sources merged into `getTokenRegistry` alongside
+     * the built-in venue sources. Use to populate the picker from your own token
+     * API / hosted token list / static array.
+     */
+    sources?: TokenSourceConfig[];
+    /**
+     * Merge priority by source id (first wins identity on `chainId:address`
+     * collisions; later sources only fill gaps). Ids not listed keep their
+     * natural order: built-in venue sources first, then `sources` in array order.
+     */
+    sourcePriority?: string[];
+    /**
+     * When true, custom `sources` REPLACE the venue-derived token registry
+     * instead of augmenting it (integrator wants only their curated list).
+     * Default false (augment).
+     */
+    replaceVenueTokens?: boolean;
   };
 
   walletScreening?: WalletScreeningConfig;

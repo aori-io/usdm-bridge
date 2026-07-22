@@ -61,9 +61,11 @@
     "@types/node": "^22",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "abitype": ">=1",
     "ethereum-gradient-base64": "^1.0.0",
     "postcss": "^8.5.0",
     "postcss-prefix-selector": "^2.1.1",
+    "tailwindcss": "^4.1.0",
     "tsup": "^8.4.0",
     "typescript": "^5"
   }

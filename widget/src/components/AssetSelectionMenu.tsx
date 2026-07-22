@@ -6,7 +6,7 @@ import type { Asset, SupportedChainId, TokenSelectCategory } from '../internal/t
 import { getAvailableChainConfigs, isGasToken } from '../internal/chainsConfig';
 import { checkedAddress, calculateDollarizedBalance } from '../internal/helpers';
 import { useDebounce } from '../internal/hooks/useDebounce';
-import { useSupportedTokensWithPricing, useTokenData } from '../internal/queries/tokens/hooks';
+import { useSupportedTokensWithPricing, useTokenData, useTokenSearch } from '../internal/queries/tokens/hooks';
 import { useBulkBalances } from '../internal/queries/balances/hooks';
 import TokenImage from '../internal/components/TokenImage';
 import ChainIcon from '../internal/components/ChainIcon';
@@ -20,6 +20,7 @@ import { AssetSelectionBalanceItem } from './AssetSelectionBalanceItem';
 
 const USDM_CHAIN_ID = 4326;
 const ONE_TO_ONE_USDC_CHAINS = new Set([1, 10, 143, 8453, 42161]);
+const EMPTY_SEARCH_RESULTS: Asset[] = [];
 
 function isOneToOnePair(
   side: 'base' | 'quote',
@@ -194,16 +195,49 @@ const AssetSelectionMenu: React.FC<AssetSelectionMenuProps> = ({
     );
   }, [allowedTokens, otherAsset]);
 
+  // Server-side search across searchable sources (Relay / integrator custom
+  // sources). Surfaces tokens that aren't in the preloaded client registry.
+  const { data: searchResults = EMPTY_SEARCH_RESULTS } = useTokenSearch(
+    debouncedSearchQuery,
+    selectedChain === 'all' ? undefined : selectedChain,
+  );
+
+  const passesSelectionFilters = useCallback(
+    (t: Asset): boolean => {
+      const key = `${t.chainId}-${t.address.toLowerCase()}`;
+      if (supportedTokensSet && !supportedTokensSet.has(key)) return false;
+      if (unsupportedTokensSet && unsupportedTokensSet.has(key)) return false;
+      if (
+        otherAsset &&
+        t.chainId === otherAsset.chainId &&
+        t.address.toLowerCase() === otherAsset.address.toLowerCase()
+      ) {
+        return false;
+      }
+      return true;
+    },
+    [supportedTokensSet, unsupportedTokensSet, otherAsset],
+  );
+
   const tokenList = React.useMemo(() => {
     if (!debouncedSearchQuery) return filteredTokens;
     const query = debouncedSearchQuery.toLowerCase();
-    return filteredTokens.filter(
+    const localMatches = filteredTokens.filter(
       (token) =>
         (token.symbol || '').toLowerCase().includes(query) ||
         (token.name || '').toLowerCase().includes(query) ||
         token.address.toLowerCase().includes(query),
     );
-  }, [filteredTokens, debouncedSearchQuery]);
+    if (searchResults.length === 0) return localMatches;
+
+    const seen = new Set(localMatches.map((t) => `${t.chainId}-${t.address.toLowerCase()}`));
+    const remoteAdditions = searchResults.filter((t) => {
+      const key = `${t.chainId}-${t.address.toLowerCase()}`;
+      if (seen.has(key)) return false;
+      return passesSelectionFilters(t);
+    });
+    return remoteAdditions.length > 0 ? [...localMatches, ...remoteAdditions] : localMatches;
+  }, [filteredTokens, debouncedSearchQuery, searchResults, passesSelectionFilters]);
 
   const prioritizedTokenIndexMap = useMemo(() => {
     const m = new Map<string, number>();

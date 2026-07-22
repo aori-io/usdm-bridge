@@ -86,3 +86,34 @@ export async function fetchRelayTokensForChain(
   });
   return tokens.map(tokenMetadataToAsset);
 }
+
+/**
+ * Server-side token search across sources that support it (Relay + any
+ * integrator `custom` source flagged `searchable`). Restricting to searchable
+ * source ids avoids re-pulling the whole client-side registry and lets a
+ * curated/indexed API answer search-as-you-type — including tokens not present
+ * in the preloaded list. Returns `[]` when no searchable source is configured.
+ */
+export async function fetchTokenSearch(
+  term: string,
+  chainId: number | undefined,
+  signal?: AbortSignal,
+): Promise<Asset[]> {
+  const query = term.trim();
+  if (!query) return [];
+  const sources = getWidgetSdk().getSearchableSourceIds();
+  if (sources.length === 0) return [];
+
+  const activeChainIds = getActiveChainIds();
+  const tokens = await getWidgetSdk().getTokenRegistry({
+    term: query,
+    sources,
+    limit: 50,
+    ...(chainId ? { chainId } : {}),
+    ...(signal ? { signal } : {}),
+  });
+  return tokens
+    .filter((t) => activeChainIds.includes(t.chainId))
+    .filter((t) => !chainId || t.chainId === chainId)
+    .map(tokenMetadataToAsset);
+}

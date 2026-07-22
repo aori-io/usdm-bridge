@@ -1,4 +1,4 @@
-import type { VenueId } from 'usdm-bridge-sdk';
+import type { TokenSourceConfig, VenueId } from 'usdm-bridge-sdk';
 import type { WidgetTheme } from '../theme/types';
 
 export interface AoriSwapWidgetConfig {
@@ -58,6 +58,18 @@ export interface AoriSwapWidgetConfig {
     showOutputSelectionTokenBalances?: boolean;
     prioritizedInputTokens?: Array<{ chainId: number; address: string }>;
     prioritizedInputChains?: number[];
+
+    /**
+     * Integrator-supplied token sources used to populate the asset picker,
+     * merged with the built-in venue sources (Aori/Relay). Bring your own token
+     * API (`custom`), a hosted token-list JSON (`tokenlist`), or a static array
+     * (`static`). Passed straight through to the SDK's `tokens.sources`.
+     */
+    sources?: TokenSourceConfig[];
+    /** Merge priority by source id (first wins on `chainId:address` collisions). */
+    sourcePriority?: string[];
+    /** When true, `sources` REPLACE the venue-derived token list instead of augmenting it. */
+    replaceVenueTokens?: boolean;
   };
   appearance?: {
     widgetType?: 'default' | 'compact' | 'horizontal' | 'split';

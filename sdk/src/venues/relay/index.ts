@@ -46,6 +46,8 @@ export interface RelayVenueOptions {
  */
 export class RelayVenue implements Venue {
   readonly id: VenueId = 'relay';
+  /** Relay searches its currency index server-side via the `term` param. */
+  readonly searchable = true;
   readonly relayEnv: RelayEnvironment;
   private readonly sdkEnv: SdkEnvironment;
   private readonly options: RelayVenueOptions;
@@ -81,16 +83,21 @@ export class RelayVenue implements Venue {
   }
 
   /**
-   * Relay token metadata (`POST /currencies/v2`). Requires a `chainId` — Relay's
-   * currencies endpoint is chain-scoped, so an unscoped call returns `[]`. Relay
+   * Relay token metadata (`POST /currencies/v2`). Relay is search-capable
+   * server-side (`term`) and can return its curated default set (`defaultList`)
+   * or resolve specific `tokens` by `"chainId:address"`. When none of
+   * `chainId` / `defaultList` / `tokens` is provided the call returns `[]`. Relay
    * does not embed prices here; use {@link getTokenPrice} for USD pricing.
    */
   async getTokens(params: GetTokensParams = {}): Promise<TokenMetadata[]> {
-    if (params.chainId == null) return [];
-    const currencies = await getRelayCurrencies(this.relayEnv, [params.chainId], {
+    const chainIds = params.chainId != null ? [params.chainId] : [];
+    const currencies = await getRelayCurrencies(this.relayEnv, chainIds, {
       limit: params.limit ?? 100,
       verifiedOnly: params.verifiedOnly !== false,
       ...(params.term ? { term: params.term } : {}),
+      ...(params.defaultList ? { defaultList: params.defaultList } : {}),
+      ...(params.tokens ? { tokens: params.tokens } : {}),
+      ...(params.useExternalSearch ? { useExternalSearch: params.useExternalSearch } : {}),
       ...(params.signal ? { signal: params.signal } : {}),
     });
     return currencies.map((c) => ({

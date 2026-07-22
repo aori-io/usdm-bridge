@@ -16,6 +16,7 @@ import { type SubmitSwapParams, submitSwap } from '../api/submit';
 import { type PollOrderStatusOptions, pollOrderStatus } from '../api/status';
 import { type TrackOrderStatusOptions, trackOrderStatus } from '../api/statusTracker';
 import type { UsdmBridgeConfig, TokenRef } from '../config/types';
+import { createTokenSource } from '../venues/customSource';
 import { UnsupportedPairError } from '../errors';
 import { type ScreeningResult, screenWallet } from '../screening/walletScreening';
 import { type BridgeParams, type BridgeResult, bridge } from '../swap/bridge';
@@ -50,6 +51,7 @@ import type {
   NormalizedQuote,
   QuoteRequestInput,
   TokenMetadata,
+  TokenSource,
   Venue,
   VenueId,
   VenueHistoryEntry,
@@ -62,6 +64,7 @@ export class UsdmBridgeSdk {
   readonly config: UsdmBridgeConfig;
   readonly env: SdkEnvironment;
   private venueRegistry?: Map<VenueId, Venue>;
+  private tokenSources?: TokenSource[];
 
   constructor(config: UsdmBridgeConfig = {}) {
     this.config = config;
@@ -135,6 +138,59 @@ export class UsdmBridgeSdk {
   /** Look up a single venue by id (used to dispatch execution/status). */
   getVenue(id: VenueId): Venue | undefined {
     return this.getVenueRegistry().get(id);
+  }
+
+  /**
+   * The ordered list of token-population sources. Built from (1) every configured
+   * venue that can enumerate tokens, then (2) integrator `config.tokens.sources`.
+   * When `config.tokens.replaceVenueTokens` is set, the venue-derived sources are
+   * dropped so only custom sources populate the registry. The final order is then
+   * re-sorted by `config.tokens.sourcePriority` (listed ids first, in that order).
+   */
+  private getTokenSources(): TokenSource[] {
+    if (this.tokenSources) return this.tokenSources;
+
+    const venueSources: TokenSource[] = this.config.tokens?.replaceVenueTokens
+      ? []
+      : this.getVenues()
+          .filter((v): v is Venue & Required<Pick<Venue, 'getTokens'>> => typeof v.getTokens === 'function')
+          .map((v) => ({
+            id: v.id,
+            getTokens: (params?: GetTokensParams) => v.getTokens!(params),
+            ...(typeof v.getTokenPrice === 'function'
+              ? { getTokenPrice: (params: GetTokenPriceParams) => v.getTokenPrice!(params) }
+              : {}),
+            ...(v.searchable ? { searchable: true } : {}),
+          }));
+
+    const customSources = (this.config.tokens?.sources ?? []).map(createTokenSource);
+
+    const combined = [...venueSources, ...customSources];
+
+    const priority = this.config.tokens?.sourcePriority;
+    if (priority && priority.length > 0) {
+      const rank = new Map(priority.map((id, i) => [id, i]));
+      combined.sort((a, b) => {
+        const ra = rank.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+        const rb = rank.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+        return ra - rb;
+      });
+    }
+
+    this.tokenSources = combined;
+    return combined;
+  }
+
+  /**
+   * Ids of token sources that perform server-side search (honor `term` in
+   * `getTokenRegistry`). The widget uses this to route search-as-you-type to
+   * those sources instead of only filtering the preloaded registry. Empty when
+   * every source is client-side only.
+   */
+  getSearchableSourceIds(): string[] {
+    return this.getTokenSources()
+      .filter((s) => s.searchable === true)
+      .map((s) => s.id);
   }
 
   private mergeAggregationOptions(opts?: GetQuotesOptions): GetQuotesOptions {
@@ -365,26 +421,31 @@ export class UsdmBridgeSdk {
   }
 
   /**
-   * Venue-aggregated token metadata (+ prices where available). Merges
-   * {@link Venue.getTokens} from every configured venue that supports it, deduped
-   * by chain+address. The first venue to yield a token owns its identity; later
-   * venues fill in missing fields (price, logoURI, name) and contribute tokens
-   * the earlier venues don't cover. This is the headless replacement for the
-   * widget talking to a specific venue's token API directly.
+   * Source-aggregated token metadata (+ prices where available). Merges
+   * {@link TokenSource.getTokens} from every token source — the built-in venue
+   * sources (Aori/Relay) plus any integrator `config.tokens.sources` — deduped by
+   * chain+address. The first source (in priority order) to yield a token owns its
+   * identity; later sources fill in missing fields (price, logoURI, name) and
+   * contribute tokens the earlier sources don't cover. This is the headless
+   * replacement for the widget talking to a specific venue's token API directly.
    *
-   * Pass `venues` to restrict which venues are queried (e.g. `['relay']` for a
-   * per-chain augmentation of an Aori-wide registry).
+   * Pass `venues`/`sources` to restrict which source ids are queried (e.g.
+   * `['relay']` for a per-chain augmentation, or `['my-token-api']` for an
+   * integrator source). Both are unioned and matched against source ids.
    */
-  async getTokenRegistry(params: GetTokensParams & { venues?: VenueId[] } = {}): Promise<TokenMetadata[]> {
-    const { venues: only, ...tokenParams } = params;
-    const venues = this.getVenues().filter(
-      (v) => typeof v.getTokens === 'function' && (!only || only.includes(v.id)),
-    );
+  async getTokenRegistry(
+    params: GetTokensParams & { venues?: VenueId[]; sources?: string[] } = {},
+  ): Promise<TokenMetadata[]> {
+    const { venues: onlyVenues, sources: onlySources, ...tokenParams } = params;
+    const only =
+      onlyVenues || onlySources
+        ? new Set<string>([...(onlyVenues ?? []), ...(onlySources ?? [])])
+        : undefined;
+
+    const sources = this.getTokenSources().filter((s) => !only || only.has(s.id));
 
     const lists = await Promise.all(
-      venues.map((v) =>
-        v.getTokens!(tokenParams).catch(() => [] as TokenMetadata[]),
-      ),
+      sources.map((s) => s.getTokens(tokenParams).catch(() => [] as TokenMetadata[])),
     );
 
     const merged = new Map<string, TokenMetadata>();
@@ -410,19 +471,20 @@ export class UsdmBridgeSdk {
   }
 
   /**
-   * Resolve a single token's USD unit price by asking each configured venue in
-   * order and returning the first non-null result. Aori answers from its token
-   * registry; Relay answers from its dedicated price endpoint. Returns `null`
-   * when no venue can price the token.
+   * Resolve a single token's USD unit price by asking each token source in
+   * priority order and returning the first non-null result. Aori answers from its
+   * token registry; Relay answers from its dedicated price endpoint; integrator
+   * `custom` sources answer from their own `getTokenPrice`. Returns `null` when no
+   * source can price the token.
    */
   async getTokenPrice(params: GetTokenPriceParams): Promise<number | null> {
-    for (const venue of this.getVenues()) {
-      if (typeof venue.getTokenPrice !== 'function') continue;
+    for (const source of this.getTokenSources()) {
+      if (typeof source.getTokenPrice !== 'function') continue;
       try {
-        const price = await venue.getTokenPrice(params);
+        const price = await source.getTokenPrice(params);
         if (price != null) return price;
       } catch {
-        // Try the next venue on failure.
+        // Try the next source on failure.
       }
     }
     return null;

@@ -167,6 +167,21 @@ export interface GetTokensParams {
   verifiedOnly?: boolean;
   /** Max tokens per venue request. */
   limit?: number;
+  /**
+   * Request the source's curated default/suggested set (what a picker shows
+   * before the user searches). Sources that don't distinguish ignore this.
+   */
+  defaultList?: boolean;
+  /**
+   * Resolve specific tokens by identity key (`"chainId:address"`). Lets a source
+   * batch-hydrate an exact set instead of returning its whole list.
+   */
+  tokens?: string[];
+  /**
+   * Allow the source to fall back to 3rd-party lookups for tokens it hasn't
+   * indexed. Off by default.
+   */
+  useExternalSearch?: boolean;
   signal?: AbortSignal;
 }
 
@@ -194,4 +209,31 @@ export interface Venue {
   getTokens?(params?: GetTokensParams): Promise<TokenMetadata[]>;
   /** Optional: resolve a single token's USD unit price. `null` when unknown. */
   getTokenPrice?(params: GetTokenPriceParams): Promise<number | null>;
+  /** Whether `getTokens` honors `term` server-side (search-as-you-type). */
+  readonly searchable?: boolean;
+}
+
+/**
+ * A token-population source, decoupled from quoting. Every {@link Venue} that
+ * implements `getTokens` is also a token source, but integrators can register
+ * standalone sources (their own token API, a hosted token-list JSON, or a static
+ * array) to populate the picker without introducing a new quote venue.
+ *
+ * A source is not a quote venue: a token it returns may not be quotable/bridgeable
+ * unless a real venue also supports it.
+ */
+export interface TokenSource {
+  /** Stable identifier, used for merge priority and dedup diagnostics. */
+  id: string;
+  /** Enumerate/search this source's tokens. */
+  getTokens(params?: GetTokensParams): Promise<TokenMetadata[]>;
+  /** Optional: resolve a single token's USD unit price. `null` when unknown. */
+  getTokenPrice?(params: GetTokenPriceParams): Promise<number | null>;
+  /**
+   * Whether this source performs server-side search when a `term` is passed to
+   * {@link getTokens}. The widget uses this to route search-as-you-type to the
+   * source instead of only filtering the preloaded registry. Default: treat as
+   * client-side only (false/undefined).
+   */
+  searchable?: boolean;
 }

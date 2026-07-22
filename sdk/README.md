@@ -304,6 +304,74 @@ The normalized `QuoteExecutionStep` kinds are venue-agnostic
 - **USD / fee / price-impact** fields are populated when the venue provides them
   (Relay does; Aori may not) — render them conditionally.
 
+## Token registry & custom token sources
+
+`getTokenRegistry()` returns venue-aggregated token metadata (+ prices where a
+source can supply them), deduped by `chainId + address`. `getTokenPrice()`
+resolves a single token's USD price by asking each source in priority order.
+
+```ts
+const tokens = await sdk.getTokenRegistry({ chainId: 8453 }); // TokenMetadata[]
+const price = await sdk.getTokenPrice({ chainId: 8453, address: '0x…' }); // number | null
+```
+
+Built-in sources are the configured **venues** that can enumerate tokens (Aori,
+Relay). Integrators can add their **own** token sources — their token API, a
+hosted token-list JSON, or a static array — via `config.tokens.sources`, without
+having to stand up a new quote venue.
+
+```ts
+import { UsdmBridgeSdk, type TokenMetadata } from 'usdm-bridge-sdk';
+
+const sdk = new UsdmBridgeSdk({
+  tokens: {
+    sources: [
+      // 1. Bring your own token API (primary pattern — POST/search-shaped, like
+      //    Relay's own `useTokenList`). Mark `searchable: true` when your API
+      //    searches server-side so the widget routes search-as-you-type to it.
+      {
+        id: 'my-token-api',
+        type: 'custom',
+        searchable: true,
+        getTokens: async ({ chainId, term, signal }) => {
+          const res = await fetch('https://tokens.example.com/list', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chainId, term }),
+            ...(signal ? { signal } : {}),
+          });
+          return (await res.json()) as TokenMetadata[];
+        },
+        getTokenPrice: async ({ chainId, address }) => {
+          // return a USD unit price, or null
+          return null;
+        },
+      },
+      // 2. Hosted Uniswap-standard token list (or a raw TokenMetadata[]). GET only.
+      { id: 'my-list', type: 'tokenlist', url: 'https://tokens.example.com/list.json' },
+      // 3. Inline static array.
+      { id: 'house-tokens', type: 'static', tokens: [/* TokenMetadata[] */] },
+    ],
+    // First id wins identity on collisions; later sources only fill gaps.
+    sourcePriority: ['my-token-api', 'aori', 'relay'],
+    // Set true to show ONLY your sources' tokens (drop venue-derived tokens).
+    replaceVenueTokens: false,
+  },
+});
+```
+
+Notes:
+- `TokenMetadata` shape: `{ chainId, address, symbol, name, decimals, logoURI?, price?, verified?, source? }`.
+- `type: 'custom'` receives the same `GetTokensParams` venues get: `chainId`,
+  `term`, `verifiedOnly`, `limit`, `defaultList`, `tokens` (`"chainId:address"`),
+  `useExternalSearch`, `signal`. Honor what you can; ignore the rest.
+- A token from a custom source is **not** automatically quotable — it only shows
+  in the picker. It's quotable only if a real venue (Aori/Relay) also supports
+  the pair.
+- **Relay endpoint gotcha:** use the public API `https://api.relay.link`
+  (`POST /currencies/v2`). `https://relay.link/api/relay/...` is Relay's own
+  website proxy and will return `403 Forbidden` for third parties.
+
 ## Server-side proxying
 
 In production, keep your Aori API key and any private RPC URLs off the client.

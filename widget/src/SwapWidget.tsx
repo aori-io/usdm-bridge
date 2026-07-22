@@ -21,6 +21,7 @@ import {
   setAoriApiBaseUrl,
   setVenuesConfig,
   setAggregationConfig,
+  setTokenSourcesConfig,
 } from './internal/environment';
 import { buildSdkVenuesConfig, isAggregatorActive, resolveAggregatorVenues } from './config/aggregator';
 import { WalletModalContext } from './wallet/WalletModalContext';
@@ -120,6 +121,19 @@ export function SwapWidget({
   setAoriApiBaseUrl(config.aoriApiBaseUrl);
   setVenuesConfig(buildSdkVenuesConfig(config));
   setAggregationConfig(undefined);
+  setTokenSourcesConfig(
+    config.tokens?.sources ||
+      config.tokens?.sourcePriority ||
+      config.tokens?.replaceVenueTokens != null
+      ? {
+          ...(config.tokens?.sources ? { sources: config.tokens.sources } : {}),
+          ...(config.tokens?.sourcePriority ? { sourcePriority: config.tokens.sourcePriority } : {}),
+          ...(config.tokens?.replaceVenueTokens != null
+            ? { replaceVenueTokens: config.tokens.replaceVenueTokens }
+            : {}),
+        }
+      : undefined,
+  );
 
   const aggregatorEnabled = isAggregatorActive(config);
   const aggregatorVenuesKey = resolveAggregatorVenues(config).join(',');

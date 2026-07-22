@@ -393,6 +393,52 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 }
 ```
 
+### Custom token sources (bring your own token list)
+
+Populate the asset picker from your own token source in addition to (or instead
+of) the built-in venue lists (Aori/Relay). Pass `tokens.sources` — it maps
+straight through to the SDK's `tokens.sources`.
+
+```ts
+const config: AoriSwapWidgetConfig = {
+  // ...
+  tokens: {
+    sources: [
+      // Your token API. Set `searchable: true` if it searches server-side —
+      // the picker will route search-as-you-type to it (incl. tokens not in
+      // the preloaded list).
+      {
+        id: 'my-token-api',
+        type: 'custom',
+        searchable: true,
+        getTokens: async ({ chainId, term, signal }) => {
+          const res = await fetch('/api/my-tokens', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chainId, term }),
+            ...(signal ? { signal } : {}),
+          });
+          return res.json(); // TokenMetadata[]
+        },
+      },
+      // Or a hosted token-list JSON, or a static inline array:
+      // { id: 'my-list', type: 'tokenlist', url: 'https://.../list.json' },
+      // { id: 'house', type: 'static', tokens: [/* ... */] },
+    ],
+    sourcePriority: ['my-token-api', 'aori', 'relay'], // first wins on collisions
+    replaceVenueTokens: false, // true = show ONLY your sources' tokens
+  },
+};
+```
+
+A custom-source token shows in the picker but is only **quotable** if a real
+venue (Aori/Relay) supports the pair. Existing `supportedInputTokens` /
+`unsupportedInputTokens` whitelists/blocklists still apply on top.
+
+> **Relay endpoint gotcha:** hit the public API `https://api.relay.link`
+> (`POST /currencies/v2`), or proxy it as shown above. `https://relay.link/api/relay/...`
+> is Relay's own website proxy and returns `403 Forbidden` for third parties.
+
 ### Advanced: building your own aggregator UI
 
 The provider, hook, and UI pieces are exported for custom experiences:
@@ -598,7 +644,7 @@ See [`AoriSwapWidgetConfig`](./src/config/types.ts) for the full type. Only non-
 | Section | Type | Description |
 | --- | --- | --- |
 | `theme` | `{ mode, light?, dark? }` | Active color mode and optional light/dark theme overrides. Each theme controls colors, border radius, fonts, and shadows. |
-| `tokens` | `{ defaultBase?, defaultQuote?, lockBase?, lockQuote?, enabledChains?, disableInverting?, supportedInputTokens?, supportedOutputTokens?, unsupportedInputTokens?, unsupportedOutputTokens? }` | Default token pair, enabled chains, lock/invert settings, per-side token whitelists, and per-side token blocklists. All fields are optional — when omitted, all supported tokens and chains are available. `unsupportedInputTokens`/`unsupportedOutputTokens` hide specific tokens from the asset selection menu (applied after the whitelist; flips with the whitelist on invert). |
+| `tokens` | `{ defaultBase?, defaultQuote?, lockBase?, lockQuote?, enabledChains?, disableInverting?, supportedInputTokens?, supportedOutputTokens?, unsupportedInputTokens?, unsupportedOutputTokens?, sources?, sourcePriority?, replaceVenueTokens? }` | Default token pair, enabled chains, lock/invert settings, per-side token whitelists/blocklists, and **custom token sources**. All fields optional. `unsupportedInputTokens`/`unsupportedOutputTokens` hide specific tokens from the asset menu (applied after the whitelist; flips with the whitelist on invert). `sources` adds integrator token lists (your API / hosted list / static array) to the picker; `sourcePriority` sets merge order; `replaceVenueTokens` shows only your sources' tokens. See [Custom token sources](#custom-token-sources-bring-your-own-token-list). |
 | `appearance` | `{ widgetType?, tokenDisplay?, assetMenuVariant?, swapButtonVariant?, ... }` | Layout variant (`default`, `compact`, `horizontal`, `split`), token display style, asset menu variant, quote loader, and other UI options. |
 | `settings` | `{ defaultSlippage? }` | Default slippage tolerance. |
 | `integrator` | `{ id?, feeRecipient?, feeAmount? }` | Integrator ID, fee recipient address, and fee amount for revenue attribution. |

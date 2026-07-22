@@ -7,7 +7,13 @@ export { getAoriClient } from './client/aoriClient';
 // ===========================
 // Config + error types
 // ===========================
-export type { UsdmBridgeConfig, TokenRef, VenuesConfig, AggregationConfig } from './config/types';
+export type {
+  UsdmBridgeConfig,
+  TokenRef,
+  VenuesConfig,
+  AggregationConfig,
+  TokenSourceConfig,
+} from './config/types';
 export {
   ChainSwitchError,
   QuoteRequestError,
@@ -126,9 +132,11 @@ export type {
   PollAggregatedStatusOptions,
   VenueHistoryEntry,
   TokenMetadata,
+  TokenSource,
   GetTokensParams,
   GetTokenPriceParams,
 } from './venues/types';
+export { createTokenSource } from './venues/customSource';
 export { AoriVenue } from './venues/aori';
 export type { AoriVenueOptions } from './venues/aori';
 export { RelayVenue } from './venues/relay';

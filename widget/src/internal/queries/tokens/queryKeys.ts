@@ -9,4 +9,6 @@ export const tokenKeys = {
   price: (chainId: number, address: string) =>
     [...tokenKeys.prices(), chainId, address.toLowerCase()] as const,
   relay: (chainId: number) => [...tokenKeys.all, 'relay', chainId] as const,
+  search: (term: string, chainId?: number) =>
+    [...tokenKeys.all, 'search', chainId ?? 'all', term.trim().toLowerCase()] as const,
 };

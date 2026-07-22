@@ -1,4 +1,4 @@
-import type { AggregationConfig, VenuesConfig } from 'usdm-bridge-sdk';
+import type { AggregationConfig, TokenSourceConfig, VenuesConfig } from 'usdm-bridge-sdk';
 
 const DEFAULT_AORI_API_URL = 'https://api.aori.io';
 
@@ -112,4 +112,41 @@ export function setAggregationConfig(config: AggregationConfig | undefined): voi
 
 export function getAggregationConfig(): AggregationConfig | undefined {
   return _aggregationConfig;
+}
+
+// ── Integrator token-source config ──────────────────────────────────────────
+// Custom token sources (their own token API / hosted list / static array) that
+// populate the picker alongside the venue sources. Set synchronously by
+// <SwapWidget> so the widget SDK singleton picks them up on first use.
+
+interface TokenSourcesConfig {
+  sources?: TokenSourceConfig[];
+  sourcePriority?: string[];
+  replaceVenueTokens?: boolean;
+}
+
+let _tokenSourcesConfig: TokenSourcesConfig | undefined;
+
+export function setTokenSourcesConfig(config: TokenSourcesConfig | undefined): void {
+  _tokenSourcesConfig = config;
+}
+
+export function getTokenSourcesConfig(): TokenSourcesConfig | undefined {
+  return _tokenSourcesConfig;
+}
+
+/** Ids of configured custom sources that opt into server-side search. */
+export function getSearchableCustomSourceIds(): string[] {
+  return (_tokenSourcesConfig?.sources ?? [])
+    .filter((s) => s.type === 'custom' && s.searchable === true)
+    .map((s) => s.id);
+}
+
+/**
+ * Whether any configured token source performs server-side search — Relay
+ * (searchable by default) or an integrator `custom` source flagged `searchable`.
+ * Used to gate search-as-you-type queries without instantiating the SDK.
+ */
+export function hasSearchableTokenSources(): boolean {
+  return isRelayConfigured() || getSearchableCustomSourceIds().length > 0;
 }
