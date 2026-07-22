@@ -368,9 +368,6 @@ Notes:
 - A token from a custom source is **not** automatically quotable — it only shows
   in the picker. It's quotable only if a real venue (Aori/Relay) also supports
   the pair.
-- **Relay endpoint gotcha:** use the public API `https://api.relay.link`
-  (`POST /currencies/v2`). `https://relay.link/api/relay/...` is Relay's own
-  website proxy and will return `403 Forbidden` for third parties.
 
 ## Server-side proxying
 
