@@ -115,6 +115,7 @@ export type { SdkChainConfig } from './chains/chainKeys';
 // Multi-venue aggregation
 // ===========================
 export type {
+  AdaptedWallet,
   Venue,
   VenueId,
   QuoteRequestInput,
@@ -150,6 +151,16 @@ export type {
   RelayStepItem,
   RelayStatusResponse,
 } from './venues/relay/types';
+export {
+  SOLANA_CHAIN_ID,
+  isSolanaChain,
+  isSolanaAddress,
+  isEvmAddress,
+} from './venues/relay/solana';
+export {
+  validateCrossChainAddresses,
+  CrossChainAddressError,
+} from './venues/relay/addressValidation';
 
 export {
   getQuotes,

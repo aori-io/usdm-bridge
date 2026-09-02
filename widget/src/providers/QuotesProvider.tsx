@@ -1,6 +1,6 @@
 'use client';
 
-import type { NormalizedQuote, VenueId } from 'usdm-bridge-sdk';
+import { type NormalizedQuote, type VenueId, isSolanaChain } from 'usdm-bridge-sdk';
 import React, {
   createContext,
   useCallback,
@@ -14,6 +14,7 @@ import { formatUnits } from 'viem';
 import { type Asset, getWidgetSdk, toBigInt } from '../internal';
 import { useWidgetConfig } from '../context/WidgetConfigContext';
 import { useWalletScreening } from '../context/WalletScreeningContext';
+import { useSolanaWallet } from '../wallet/SolanaWalletContext';
 import { useWalletState } from '../wallet/useWalletState';
 
 export type QuotesStatus = 'idle' | 'polling' | 'fresh' | 'stale' | 'refreshing';
@@ -89,10 +90,24 @@ interface QuotesProviderProps {
 }
 
 export const QuotesProvider: React.FC<QuotesProviderProps> = ({ children, recipient: recipientProp }) => {
-  const { address: userAddress } = useWalletState();
+  const { address: evmAddress } = useWalletState();
+  const solanaWallet = useSolanaWallet();
+  const [solanaAddress, setSolanaAddress] = useState<string | null>(null);
   const { isBlocked: isWalletBlocked } = useWalletScreening();
   const { aggregatorVenues } = useWidgetConfig();
-  const recipient = recipientProp || userAddress;
+
+  useEffect(() => {
+    let cancelled = false;
+    if (solanaWallet) {
+      solanaWallet.address().then((addr) => { if (!cancelled) setSolanaAddress(addr); });
+    } else {
+      setSolanaAddress(null);
+    }
+    return () => { cancelled = true; };
+  }, [solanaWallet]);
+
+  const userAddress = evmAddress;
+  const recipient = recipientProp || evmAddress;
 
   const [status, setStatus] = useState<QuotesStatus>('idle');
   const [inputState, setInputState] = useState<InputState>('idle');
@@ -200,7 +215,9 @@ export const QuotesProvider: React.FC<QuotesProviderProps> = ({ children, recipi
             dstTokenAddress: outputToken.address,
             amount: inputAmount,
             srcTokenDecimals: inputToken.decimals,
-            srcWalletAddress: (userAddress as string) || '0x0000000000000000000000000000000000000000',
+            srcWalletAddress: isSolanaChain(inputToken.chainId)
+              ? (solanaAddress || '')
+              : ((userAddress as string) || '0x0000000000000000000000000000000000000000'),
             ...(recipient ? { dstWalletAddress: recipient as string } : {}),
           },
           {
@@ -255,7 +272,7 @@ export const QuotesProvider: React.FC<QuotesProviderProps> = ({ children, recipi
         if (isCurrent()) setFetching(false);
       }
     },
-    [userAddress, recipient, scheduleStaleFrom],
+    [userAddress, solanaAddress, recipient, scheduleStaleFrom],
   );
 
   const startPolling = useCallback(

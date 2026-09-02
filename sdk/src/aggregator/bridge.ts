@@ -76,6 +76,7 @@ export async function bridgeQuote(
     ...(params.validateBeforeSubmit ? { validateBeforeSubmit: params.validateBeforeSubmit } : {}),
     ...(params.skipChainSwitch ? { skipChainSwitch: params.skipChainSwitch } : {}),
     ...(params.abortSignal ? { abortSignal: params.abortSignal } : {}),
+    ...(params.solanaWallet ? { solanaWallet: params.solanaWallet } : {}),
   };
 
   const exec = await venue.executeQuote(quote, execParams);

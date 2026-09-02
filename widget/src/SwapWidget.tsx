@@ -24,6 +24,7 @@ import {
 } from './internal/environment';
 import { buildSdkVenuesConfig, isAggregatorActive, resolveAggregatorVenues } from './config/aggregator';
 import { WalletModalContext } from './wallet/WalletModalContext';
+import { SolanaWalletProvider } from './wallet/SolanaWalletContext';
 import { WalletScreeningProvider } from './context/WalletScreeningContext';
 
 const EMPTY_CHAINS: number[] = [];
@@ -93,6 +94,12 @@ export interface SwapWidgetProps {
   onRequestConnect?: () => void;
   onRequestAccount?: () => void;
   customWalletUI?: 'builtin' | 'none' | 'provider';
+  /**
+   * Pre-connected Solana adapted wallet (e.g. from
+   * `@relayprotocol/relay-svm-wallet-adapter`). Required for executing swaps
+   * that originate on Solana; optional otherwise. Pass `null` when disconnected.
+   */
+  solanaWallet?: import('usdm-bridge-sdk').AdaptedWallet | null;
 }
 
 function resolveTheme(cfg: AoriSwapWidgetConfig): WidgetTheme {
@@ -112,6 +119,7 @@ export function SwapWidget({
   onRequestConnect,
   onRequestAccount,
   customWalletUI = 'builtin',
+  solanaWallet,
 }: SwapWidgetProps) {
   // Synchronous so every fetch (including initial token/chain queries) picks up
   // the overrides before any React Query hooks fire.
@@ -313,6 +321,7 @@ export function SwapWidget({
 
   const inner = (
     <AoriClientProvider>
+      <SolanaWalletProvider wallet={solanaWallet ?? null}>
       <WalletScreeningProvider config={config.walletScreening} onBlockedWallet={onBlockedWallet}>
       <WidgetConfigContext.Provider value={widgetConfigValue}>
         <WidgetThemeProvider theme={theme}>
@@ -349,6 +358,7 @@ export function SwapWidget({
         </WidgetThemeProvider>
       </WidgetConfigContext.Provider>
     </WalletScreeningProvider>
+    </SolanaWalletProvider>
     </AoriClientProvider>
   );
 

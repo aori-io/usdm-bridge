@@ -79,6 +79,27 @@ export interface AggregatedStatus {
   raw: unknown;
 }
 
+/**
+ * Minimal structural type for a Relay-compatible adapted wallet (e.g. the value
+ * returned by `adaptSolanaWallet` from `@relayprotocol/relay-svm-wallet-adapter`).
+ * Using a structural type lets the SDK accept adapted wallets without depending
+ * on the adapter package directly.
+ */
+export interface AdaptedWallet {
+  vmType: string;
+  getChainId: () => Promise<number>;
+  handleSendTransactionStep: (chainId: number, item: unknown, step: unknown) => Promise<string>;
+  handleConfirmTransactionStep: (
+    txHash: string,
+    chainId: number,
+    onReplaced?: () => void,
+    onCancelled?: () => void,
+  ) => Promise<unknown>;
+  handleSignMessageStep: (item: unknown, step: unknown) => Promise<string>;
+  address: () => Promise<string>;
+  switchChain: (chainId: number) => Promise<void>;
+}
+
 export interface ExecuteQuoteParams {
   walletClient: SwapWalletClient;
   /** Defaults to `walletClient.account.address`. */
@@ -92,6 +113,12 @@ export interface ExecuteQuoteParams {
   /** When true, skips the implicit chain switch to the input chain. */
   skipChainSwitch?: boolean;
   abortSignal?: AbortSignal;
+  /**
+   * Adapted wallet for Solana transactions (e.g. from
+   * `@relayprotocol/relay-svm-wallet-adapter`). Required when the quote involves
+   * Solana as origin chain; ignored for pure-EVM routes.
+   */
+  solanaWallet?: AdaptedWallet;
 }
 
 export interface ExecuteQuoteResult {

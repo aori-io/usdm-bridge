@@ -1,5 +1,6 @@
 import { getAddress, parseUnits } from 'viem';
 import type { NormalizedQuote, QuoteRequestInput } from '../types';
+import { validateCrossChainAddresses } from './addressValidation';
 import { type RelayEnvironment, relayFetch, resolveRelayUrl } from './client';
 import type { RelayQuoteResponse } from './types';
 
@@ -97,6 +98,13 @@ export async function requestRelayQuote(
   ctx: RequestRelayQuoteContext,
   opts: { signal?: AbortSignal; timeoutMs?: number } = {},
 ): Promise<RelayQuoteResponse> {
+  validateCrossChainAddresses(
+    input.srcChainId,
+    input.dstChainId,
+    input.srcWalletAddress,
+    input.dstWalletAddress,
+  );
+
   const amount = normalizeAmount(input.amount, input.srcTokenDecimals);
   const recipient = input.dstWalletAddress || input.srcWalletAddress;
 

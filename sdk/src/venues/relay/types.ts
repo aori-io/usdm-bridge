@@ -83,6 +83,21 @@ export interface RelayStepItemCheck {
   method: string;
 }
 
+/** A single Solana instruction account reference. */
+export interface RelaySolanaInstructionKey {
+  pubkey: string;
+  isSigner: boolean;
+  isWritable: boolean;
+}
+
+/** A Solana instruction as returned by Relay on SVM transaction steps. */
+export interface RelaySolanaInstruction {
+  programId: string;
+  /** Hex-encoded instruction data. */
+  data: string;
+  keys: RelaySolanaInstructionKey[];
+}
+
 export interface RelayStepItemData {
   from?: string;
   to?: string;
@@ -92,6 +107,14 @@ export interface RelayStepItemData {
   maxFeePerGas?: string;
   maxPriorityFeePerGas?: string;
   gas?: string;
+  /**
+   * Present on Solana (SVM) transaction step items instead of `to`/`data`/
+   * `value`. Relay omits `chainId` on these, so the presence of this field is
+   * the marker that a step must be executed via a Solana wallet.
+   */
+  instructions?: RelaySolanaInstruction[];
+  /** Address lookup tables used to compress the Solana v0 message. */
+  addressLookupTableAddresses?: string[];
   /** Present on signature step items. */
   sign?: RelaySignData;
   /** Present on signature step items — where to submit the signature. */

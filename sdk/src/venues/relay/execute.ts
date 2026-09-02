@@ -5,9 +5,10 @@ import { QuoteStaleError } from '../../errors';
 import { ChainSwitch } from '../../swap/chainSwitch';
 import { getPublicClient } from '../../swap/publicClients';
 import { resolveChainId } from '../../swap/walletClient';
-import type { ExecuteQuoteParams, ExecuteQuoteResult, NormalizedQuote } from '../types';
+import type { AdaptedWallet, ExecuteQuoteParams, ExecuteQuoteResult, NormalizedQuote } from '../types';
 import { type RelayEnvironment, relayFetch, resolveRelayUrl } from './client';
 import { RELAY_NATIVE_ADDRESS, extractRequestId } from './quotes';
+import { isSolanaChain } from './solana';
 import type { RelayQuoteResponse, RelaySignData, RelayStep, RelayStepItem } from './types';
 
 export interface ExecuteRelayContext {
@@ -43,6 +44,22 @@ function getReceiptClient(sdkEnv: SdkEnvironment, chainId: number, walletClient:
 /** A transaction step id that actually commits funds (as opposed to `approve`). */
 function isFundingStep(step: RelayStep): boolean {
   return step.id !== 'approve';
+}
+
+/**
+ * Whether a step item must be executed through a Solana wallet.
+ *
+ * Relay does not put a `chainId` on SVM step items — a Solana deposit arrives as
+ * `{ instructions, addressLookupTableAddresses }` with no `to`/`data`/`value`.
+ * So `instructions` is the primary marker; `chainId` is only consulted as a
+ * secondary signal, falling back to the quote's source chain.
+ */
+function isSvmTransactionItem(item: RelayStepItem, srcChainId: number): boolean {
+  const data = item.data;
+  if (!data) return false;
+  if (Array.isArray(data.instructions)) return true;
+  if (data.chainId != null) return isSolanaChain(data.chainId);
+  return isSolanaChain(srcChainId);
 }
 
 /** Sign a Relay signature step item per its `signatureKind`. */
@@ -117,7 +134,7 @@ export async function executeRelayQuote(
   params: ExecuteQuoteParams,
   ctx: ExecuteRelayContext,
 ): Promise<ExecuteQuoteResult> {
-  const { walletClient, onStep, onTxHash, validateBeforeSubmit, skipChainSwitch, abortSignal } = params;
+  const { walletClient, onStep, onTxHash, validateBeforeSubmit, skipChainSwitch, abortSignal, solanaWallet } = params;
   const { sdkEnv, relayEnv } = ctx;
 
   const userAddress = (params.userAddress || walletClient.account?.address) as Address | undefined;
@@ -157,26 +174,57 @@ export async function executeRelayQuote(
       if (item.status === 'complete') continue;
 
       if (step.kind === 'transaction') {
-        await executeTransactionItem(step, item, {
-          sdkEnv,
-          relayEnv,
-          walletClient,
-          userAddress,
-          ...(abortSignal ? { abortSignal } : {}),
-          ensureChain,
-          onStep: (s) => onStep?.(s),
-          onTxHash: (hash, kind) => onTxHash?.(hash, kind),
-          beforeFunding: () => {
-            if (isFundingStep(step)) runValidation();
-          },
-          pushHash: (hash) => txHashes.push(hash),
-        });
+        if (isSvmTransactionItem(item, quote.srcChainId)) {
+          await executeSolanaTransactionItem(step, item, {
+            relayEnv,
+            solanaWallet,
+            svmChainId: item.data?.chainId ?? quote.srcChainId,
+            abortSignal,
+            onStep: (s) => onStep?.(s),
+            onTxHash: (hash, kind) => onTxHash?.(hash, kind),
+            beforeFunding: () => {
+              if (isFundingStep(step)) runValidation();
+            },
+            pushHash: (hash) => txHashes.push(hash),
+          });
+        } else {
+          await executeTransactionItem(step, item, {
+            sdkEnv,
+            relayEnv,
+            walletClient,
+            userAddress,
+            ...(abortSignal ? { abortSignal } : {}),
+            ensureChain,
+            onStep: (s) => onStep?.(s),
+            onTxHash: (hash, kind) => onTxHash?.(hash, kind),
+            beforeFunding: () => {
+              if (isFundingStep(step)) runValidation();
+            },
+            pushHash: (hash) => txHashes.push(hash),
+          });
+        }
       } else if (step.kind === 'signature') {
         const sign = item.data?.sign;
         if (!sign) continue;
         runValidation();
         onStep?.({ kind: 'signing' });
-        const sig = await signItem(walletClient as WalletClient, userAddress, sign);
+
+        // Solana signature steps are delegated to the adapted wallet. Note the
+        // official SVM adapter does not implement message signing, so this
+        // surfaces its error rather than silently signing with the EVM wallet.
+        let sig: string;
+        if (isSolanaChain(item.data?.chainId ?? quote.srcChainId)) {
+          if (!solanaWallet) {
+            throw new Error(
+              'Solana signature step encountered but no solanaWallet was provided. ' +
+                'Pass a Solana adapted wallet (e.g. from @relayprotocol/relay-svm-wallet-adapter) in ExecuteQuoteParams.',
+            );
+          }
+          sig = await solanaWallet.handleSignMessageStep(item, step);
+        } else {
+          sig = await signItem(walletClient as WalletClient, userAddress, sign);
+        }
+
         signature = sig;
         await submitSignature(relayEnv, item, sig, abortSignal);
         onStep?.({ kind: 'submitted', quoteId: extractRequestId(raw) || quote.quoteId });
@@ -240,6 +288,56 @@ async function executeTransactionItem(step: RelayStep, item: RelayStepItem, ctx:
   }
 
   await getReceiptClient(ctx.sdkEnv, chainId, ctx.walletClient as WalletClient).waitForTransactionReceipt({ hash });
+
+  if (item.check?.endpoint) {
+    await pollStepCheck(ctx.relayEnv, item.check.endpoint, item.check.method, ctx.abortSignal);
+  }
+}
+
+interface ExecuteSolanaTxItemCtx {
+  relayEnv: RelayEnvironment;
+  solanaWallet?: AdaptedWallet;
+  /** Relay omits chainId on SVM items, so this is resolved by the caller. */
+  svmChainId: number;
+  abortSignal?: AbortSignal;
+  onStep: (step: import('../types').QuoteExecutionStep) => void;
+  onTxHash: (hash: string, kind: string) => void;
+  beforeFunding: () => void;
+  pushHash: (hash: string) => void;
+}
+
+/**
+ * Execute a Solana (SVM) transaction step via the adapted wallet. The adapter
+ * compiles `item.data.instructions` into a versioned transaction, signs, and
+ * broadcasts; we drive progress callbacks and poll the Relay check endpoint.
+ *
+ * No chain switch is performed — Solana is a separate wallet connection, not a
+ * chain the EVM wallet can switch to.
+ */
+async function executeSolanaTransactionItem(
+  step: RelayStep,
+  item: RelayStepItem,
+  ctx: ExecuteSolanaTxItemCtx,
+): Promise<void> {
+  if (!ctx.solanaWallet) {
+    throw new Error(
+      'Solana transaction step encountered but no solanaWallet was provided. ' +
+        'Pass a Solana adapted wallet (e.g. from @relayprotocol/relay-svm-wallet-adapter) in ExecuteQuoteParams.',
+    );
+  }
+
+  const chainId = ctx.svmChainId;
+
+  ctx.beforeFunding();
+  checkAborted(ctx.abortSignal);
+
+  const hash = await ctx.solanaWallet.handleSendTransactionStep(chainId, item, step);
+
+  ctx.pushHash(hash);
+  ctx.onTxHash(hash, step.id);
+  ctx.onStep({ kind: 'transaction-sent', hash, chainId });
+
+  await ctx.solanaWallet.handleConfirmTransactionStep(hash, chainId);
 
   if (item.check?.endpoint) {
     await pollStepCheck(ctx.relayEnv, item.check.endpoint, item.check.method, ctx.abortSignal);

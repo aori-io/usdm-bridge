@@ -9,6 +9,7 @@ export type { SwapWidgetProps } from './SwapWidget';
 export type { AoriSwapWidgetConfig } from './config/types';
 export { ConnectButton } from './wallet/ConnectButton';
 export { useWalletModal } from './wallet/WalletModalContext';
+export { useSolanaWallet, SolanaWalletProvider } from './wallet/SolanaWalletContext';
 export { useTransactionRegistry } from './wallet/TransactionRegistryContext';
 export { WidgetThemeProvider, useWidgetTheme } from './theme/ThemeContext';
 export {

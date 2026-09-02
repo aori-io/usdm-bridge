@@ -1,6 +1,6 @@
 'use client';
 
-import { type AggregatedStatus, type NormalizedQuote, isUserRejectionError } from 'usdm-bridge-sdk';
+import { type AggregatedStatus, type NormalizedQuote, isSolanaChain, isUserRejectionError } from 'usdm-bridge-sdk';
 import React, { useCallback, useState } from 'react';
 import { useAccount, useConfig, useSwitchChain, useWalletClient } from 'wagmi';
 import { type Asset, type ReviewOrderStep, getWidgetSdk } from '../../internal';
@@ -8,6 +8,7 @@ import type { SwapCompleteData } from '../../lib/parseExplorerHash';
 import { buildWalletClientForChain, ensureWalletOnChain } from '../../lib/ensureWalletChain';
 import { type ToastStatus, useWidgetSwapUIStore } from '../../stores/swapUIStore';
 import { useWidgetConfig } from '../../context/WidgetConfigContext';
+import { useSolanaWallet } from '../../wallet/SolanaWalletContext';
 
 function mapToToast(status: AggregatedStatus['status']): ToastStatus {
   switch (status) {
@@ -67,6 +68,7 @@ export const AggregatorSwapButton: React.FC<AggregatorSwapButtonProps> = ({
 }) => {
   const { widgetType } = useWidgetConfig();
   const isCompactMode = widgetType === 'compact';
+  const solanaWallet = useSolanaWallet();
   const { chainId: currentChainId, connector } = useAccount();
   const wagmiConfig = useConfig();
   const { switchChainAsync } = useSwitchChain();
@@ -125,8 +127,14 @@ export const AggregatorSwapButton: React.FC<AggregatorSwapButtonProps> = ({
       }
 
       const sdk = getWidgetSdk();
+      const needsSolana = isSolanaChain(selectedQuote.srcChainId);
+      if (needsSolana && !solanaWallet) {
+        throw new Error('Solana wallet not connected. Connect a Solana wallet to swap from Solana.');
+      }
+
       await sdk.bridgeQuote(selectedQuote, {
         walletClient: walletClient as never,
+        ...(solanaWallet ? { solanaWallet } : {}),
         onStep: (step) => {
           if (step.kind === 'submitted' || step.kind === 'transaction-sent' || step.kind === 'done') {
             startTrack();
@@ -177,6 +185,7 @@ export const AggregatorSwapButton: React.FC<AggregatorSwapButtonProps> = ({
     userAddress,
     switchChainAsync,
     refetchWalletClient,
+    solanaWallet,
     setReviewState,
     setTrackedOrderHash,
     setTrackedVenue,

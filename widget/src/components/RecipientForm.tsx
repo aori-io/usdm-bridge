@@ -1,9 +1,20 @@
 'use client';
 
+import { isSolanaAddress, isSolanaChain, isEvmAddress } from 'usdm-bridge-sdk';
 import { UserIcon, isAddress, useDebounce } from '../internal';
 import { makeGradient } from 'ethereum-gradient-base64';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useTokenSelectionStore } from '../hooks/useTokenSelection';
 import { useWidgetSwapUIStore } from '../stores/swapUIStore';
+
+function validateRecipientAddress(address: string, destChainId?: number): { valid: boolean; error?: string } {
+  if (destChainId != null && isSolanaChain(destChainId)) {
+    if (isSolanaAddress(address)) return { valid: true };
+    return { valid: false, error: 'Enter a valid Solana address...' };
+  }
+  if (isAddress(address) || isEvmAddress(address)) return { valid: true };
+  return { valid: false, error: 'Invalid wallet address...' };
+}
 
 const RecipientForm = () => {
   const [recipient, setRecipient] = useState<string | null>(null);
@@ -11,6 +22,9 @@ const RecipientForm = () => {
   const debouncedValue = useDebounce(inputValue, 1000);
   const [isError, setIsError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  const quoteToken = useTokenSelectionStore((s) => s.quoteToken);
+  const destChainId = useMemo(() => quoteToken?.chainId, [quoteToken]);
 
   useEffect(() => {
     useWidgetSwapUIStore.getState().setRecipient(recipient);
@@ -37,17 +51,20 @@ const RecipientForm = () => {
       setIsError(false);
       setErrorMessage('');
       setRecipient(null);
-    } else if (!isAddress(debouncedValue)) {
-      setIsError(true);
-      setErrorMessage('Invalid wallet address...');
-      setRecipient(null);
-      setInputValue('');
     } else {
-      setIsError(false);
-      setErrorMessage('');
-      setRecipient(debouncedValue);
+      const { valid, error } = validateRecipientAddress(debouncedValue, destChainId);
+      if (!valid) {
+        setIsError(true);
+        setErrorMessage(error ?? 'Invalid wallet address...');
+        setRecipient(null);
+        setInputValue('');
+      } else {
+        setIsError(false);
+        setErrorMessage('');
+        setRecipient(debouncedValue);
+      }
     }
-  }, [debouncedValue]);
+  }, [debouncedValue, destChainId]);
 
   useEffect(() => {
     if (isError) {
@@ -133,7 +150,13 @@ const RecipientForm = () => {
             outline: 'none',
             opacity: isError ? 0.9 : 1,
           }}
-          placeholder={isError ? errorMessage : 'Enter recipient address...'}
+          placeholder={
+            isError
+              ? errorMessage
+              : destChainId != null && isSolanaChain(destChainId)
+                ? 'Enter Solana recipient address...'
+                : 'Enter recipient address...'
+          }
           value={inputValue}
           onChange={handleInputChange}
           spellCheck={false}

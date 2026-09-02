@@ -35,16 +35,26 @@ interface RelayChainsResponse {
   chains?: RawRelayChain[];
 }
 
+/** VM types this SDK can quote and execute against. */
+const DEFAULT_VM_TYPES = ['evm', 'svm'] as const;
+
 export interface GetRelayChainsOptions {
   signal?: AbortSignal;
   /** Include chains flagged `disabled`. Default false. */
   includeDisabled?: boolean;
+  /**
+   * VM types to include. Defaults to `['evm', 'svm']` — the types this SDK can
+   * execute. Pass `['evm']` to exclude Solana. Chains on VM types with no
+   * execution path (Bitcoin, TON, …) are always excluded unless requested here.
+   */
+  vmTypes?: string[];
 }
 
 /**
- * Fetch Relay's supported chains (`GET /chains`), filtered to EVM chains and
- * normalized. Non-EVM chains (Solana, Bitcoin, TON, …) are excluded since this
- * SDK/widget is EVM/viem-based.
+ * Fetch Relay's supported chains (`GET /chains`), normalized. EVM and Solana
+ * chains are returned by default; the caller can narrow this via
+ * {@link GetRelayChainsOptions.vmTypes}. Each result keeps its real `vmType`
+ * so consumers can branch on EVM vs SVM.
  */
 export async function getRelayChains(
   env: RelayEnvironment,
@@ -55,15 +65,17 @@ export async function getRelayChains(
     method: 'GET',
     ...(opts.signal ? { signal: opts.signal } : {}),
   });
+  const allowedVmTypes = new Set<string>(opts.vmTypes ?? DEFAULT_VM_TYPES);
   const chains = Array.isArray(res?.chains) ? res.chains : [];
   return chains
-    .filter((c): c is RawRelayChain & { id: number } => c != null && typeof c.id === 'number' && c.vmType === 'evm')
+    .filter((c): c is RawRelayChain & { id: number; vmType: string } =>
+      c != null && typeof c.id === 'number' && c.vmType != null && allowedVmTypes.has(c.vmType))
     .filter((c) => opts.includeDisabled || !c.disabled)
     .map((c) => ({
       id: c.id,
       key: (c.name ?? String(c.id)).toLowerCase(),
       name: c.displayName ?? c.name ?? `Chain ${c.id}`,
-      vmType: 'evm',
+      vmType: c.vmType,
       ...(c.httpRpcUrl ? { rpcUrl: c.httpRpcUrl } : {}),
       ...(c.wsRpcUrl ? { wsRpcUrl: c.wsRpcUrl } : {}),
       ...(c.explorerUrl ? { explorerUrl: c.explorerUrl } : {}),
